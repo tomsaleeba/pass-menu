@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 set +x
-readonly VERSION="v0.0 git"
+readonly VERSION="v1.0"
 
 MODE=""
 MENUCMD=""
@@ -25,15 +25,15 @@ fi
 # ---------------------- #
 #          INFO          #
 # ---------------------- #
-function show-help {
+show-help () {
 	echo \
-"Usage: pass-menu [Option] -- COMMAND [ARGS]
+"Usage: pass-menu [OPTIONS] -- COMMAND [ARGS]
 
 Options:
   -p, --path              path to password store
   -c, --clip              copy output to clipboard
       --timeout           timeout for clearing clipboard [default: 45]
-  -t, --type              type the output, useful in GUI applications 
+  -t, --type              type the output, useful for GUI applications
   -e, --echo              print output to standard output
   -h, --help              display this help and exit
   -v, --version           output version information and exit
@@ -45,12 +45,12 @@ Examples:
 	exit 0
 }
 
-function show-version {
+show-version () {
 	echo "${VERSION}"
 	exit 0
 }
 
-function error {
+error () {
 	local  MSG="${1}"; shift 1
 	local ARGS="${@}"
 
@@ -61,72 +61,72 @@ function error {
 # ---------------------- #
 #          OPTS          #
 # ---------------------- #
-function set-opt-path {
+set-opt-path () {
 	local OPTION="${1}"
 
-	if [[ ! -d "${OPTION}" ]]; then
-		error '--path "%s" is not a valid directory.' "${OPTION}" 
+	if [ ! -d "${OPTION}" ]; then
+		error '--path "%s" is not a valid directory.' "${OPTION}"
 	fi
 
 	STOREDIR="${OPTION}"
 }
 
-function set-opt-mode {
+set-opt-mode () {
 	local OPTION="${1}"
 
-	if [[ "${MODE}" && "${MODE}" != "${OPTION}" ]]; then
+	if [ -n "${MODE}" ] && [ "${MODE}" != "${OPTION}" ]; then
 		error 'conflicting option "--%s" with "--%s"' "${OPTION}" "${MODE}"
 	fi
 
 	MODE="${OPTION}"
 }
 
-function set-opt-timeout {
+set-opt-timeout () {
 	local OPTION="${1}"
 
 	if [[ ! "${OPTION}" =~ ^[0-9]+$ ]]; then
 		error '"--timeout" must be an integer'
-	elif [[ "${OPTION}" -lt 10 ]]; then
+	elif [ "${OPTION}" -lt 10 ]; then
 		error '"--timeout" must be greater than 10'
 	fi
 	
 	TIMEOUT="${OPTION}"
 }
 
-function set-opt-cmd {
+set-opt-cmd () {
 	local OPTION="${*}"
 
 	MENUCMD="${OPTION}"
 }
 
-function opt-error {
+opt-error () {
 	local OPTION="${1}"
 
 	error 'invalid option "%s"' "${OPTION}"
 }
 
-while [ -n "${1}" ]; do
+while [ -v 1 ]; do
 	case "${1}" in
-		-p | --path)      set-opt-path "${2}"; shift 2 ;;
-		-c | --clip)      set-opt-mode 'clip'; shift 1 ;;
-		-t | --type)      set-opt-mode 'type'; shift 1 ;;
-		-e | --echo)      set-opt-mode 'echo'; shift 1 ;;
-		     --timeout)   set-opt-timeout "${2}" ; shift 2 ;;
-		-h | --help)      show-help ;;
-		-v | --version)   show-version ;;
-		--)               shift; set-opt-cmd "${@}"; break ;;
-		*)                opt-error "${1}" ;;
+		-p | --path)     set-opt-path "${2}"; shift 2 ;;
+		-c | --clip)     set-opt-mode 'clip'; shift 1 ;;
+		-t | --type)     set-opt-mode 'type'; shift 1 ;;
+		-e | --echo)     set-opt-mode 'echo'; shift 1 ;;
+		     --timeout)  set-opt-timeout "${2}" ; shift 2 ;;
+		-h | --help)     show-help ;;
+		-v | --version)  show-version ;;
+		--)              shift; set-opt-cmd "${@}"; break ;;
+		*)               opt-error "${1}" ;;
 	esac
 done
 
-if [[ ! "${MENUCMD}" ]]; then
+if [ -z "${MENUCMD}" ]; then
 	error "missing required argument COMMAND"
 fi
 
 # ---------------------- #
 #         UTILS          #
 # ---------------------- #
-function clip-copy {
+clip-copy () {
 	local VALUE="${1}"
 	local ORIG="$(${CLIPGET})"
 	local MSG="Copied to clipboard. Will clear in ${TIMEOUT} seconds."
@@ -141,13 +141,13 @@ function clip-copy {
 	{
 		sleep "${TIMEOUT}" || exit 1
 		# restore clipboard back to orginal if it hasn't changed.
-		if [[ "$(${CLIPGET})" == "${VALUE}" ]]; then
+		if [ "$(${CLIPGET})" = "${VALUE}" ]; then
 			printf "${ORIG}" | ${CLIPSET}
 		fi
 	} &
 }
 
-function dotool-type {
+dotool-type () {
 	local VALUE="${1}"
 
 	printf "${VALUE}" | ${DOTOOL}
@@ -156,42 +156,42 @@ function dotool-type {
 # ---------------------- #
 #          MAIN          #
 # ---------------------- #
-function get-pass-files {
-	local LIST
-
+get-pass-files () {
 	shopt -s nullglob globstar
+
+	local LIST
 	LIST=("$STOREDIR"/**/*.gpg)
 	LIST=("${LIST[@]#"$STOREDIR"/}")
 	LIST=("${LIST[@]%.gpg}")
 
-	printf "%s\n" "${LIST[@]}" 
+	printf "%s\n" "${LIST[@]}"
 }
 
-function get-pass-keys {
+get-pass-keys () {
 	local PASS_NAME="${1}"
 	local PASS_FILE="$(pass "${PASS_NAME}")"
 	
-	if [[ ${#PASS_FILE} -lt 3 ]]; then
-		error '"%s" is too short.' "${PASS_NAME}" 
+	if [ ${#PASS_FILE} -le 1 ]; then
+		error '"%s" is too short.' "${PASS_NAME}"
 	fi
 
 	# Parse Action First
 	awk '
-	/action(.+)/ { 
+	/action(.+)/ {
 		match($1, /action\((.+)\)/, a)
 		printf "((%s))\n", a[1]
 	}' <<< "${PASS_FILE}"
 
 	# Parse Rest of Keys
 	awk '
-	BEGIN { 
+	BEGIN {
 		FS=": +"
-		password="Yes" 
-	} 
+		password="Yes"
+	}
 
-	NR == 1 && ! $2 { print "Password"; password=Null } 
+	NR == 1 && ! $2 { print "Password"; password=Null }
 
-	$2 { 
+	$2 {
 		sub("^ +", "", $1)
 		if ( $1 == "Password") {
 			if (password) print $1
@@ -203,50 +203,48 @@ function get-pass-keys {
 	/^ *otpauth:/ { print "OTP" }' <<< "${PASS_FILE}"
 }
 
-function get-pass-value {
+get-pass-value () {
 	local PASS_NAME="${1}"
 	local PASS_KEY="${2}"
 
-	case "${PASS_KEY}" in 
-	OTP)      
-		pass otp "${PASS_NAME}" 
+	case "${PASS_KEY}" in
+	OTP)
+		pass otp "${PASS_NAME}"
 	;;
-
-	Password) 
+	Password)
 		pass "${PASS_NAME}" | awk '
-		BEGIN { 
+		BEGIN {
 			FS=": +"
-			password="Yes" 
-		} 
+			password="Yes"
+		}
 
-		NR == 1 && ! $2 { print $1; password=Null } 
+		NR == 1 && ! $2 { print $1; password=Null }
 
 		/Password/ && $2 { if (password) print $2 }'
 	;;
-
-	*) 
+	*)
 		pass "${PASS_NAME}" | awk -v key="${PASS_KEY}" '
 		BEGIN { FS=": +" }
 
 		$2 {
 			if ($1 ~ key)
 				for (i=2; i<=NF; i++) print $i
-		}' 
+		}'
 	;;
 	esac
 }
 
-function get-action {
+get-action () {
 	local PASS_NAME="${1}"
 	local  ACT_NAME="${2}"
 
 	pass "${PASS_NAME}" | awk -v action="action.+${ACT_NAME}" '{
-		if ($1 ~ action) 
+		if ($1 ~ action)
 			for (i=2; i<=NF; i++) print $i
 	}'
 }
 
-function execute-action {
+execute-action () {
 	local PASS_NAME="${1}"
 	shift
 
@@ -268,7 +266,6 @@ function execute-action {
 			sleep "${2}"
 			shift 2
 			;;
-
 		:exec | :notify)
 			local ACT="${1}"
 			local STR="${2:1}"
@@ -291,15 +288,14 @@ function execute-action {
 				notify-send "${STR}"
 			fi
 			;;
-
 		:*) error "invalid action %s in %s" "${1}" "${PASS_NAME}" ;;
 		*)  error "invalid param %s in %s" "${1}" "${PASS_NAME}" ;;
 		esac
 	done
 }
 
-function get-mode {
-	if [[ "${MODE}" ]]; then
+get-mode () {
+	if [ -n "${MODE}" ]; then
 		printf "${MODE}"
 	else
 		local CANDIDATES="clip\ntype\necho"
@@ -307,7 +303,7 @@ function get-mode {
 	fi
 }
 
-function call-menu {
+call-menu () {
 	local PIPE="$(< /dev/stdin)"
 
 	[ -z "${PIPE}" ] && exit 1
@@ -315,14 +311,14 @@ function call-menu {
 	printf "${PIPE}" | ${MENUCMD}
 }
 
-function main {
+main () {
 	local PASS_NAME PASS_KEY OUT
 
 	PASS_NAME=$(get-pass-files | call-menu)
-	[[ ! ${PASS_NAME} ]] && exit 1
+	[ -z "${PASS_NAME}" ] && exit 1
 
 	PASS_KEY=$(get-pass-keys "${PASS_NAME}" | call-menu)
-	[[ ! ${PASS_KEY} ]] && exit 1
+	[ -z "${PASS_KEY}" ] && exit 1
 
 	if [ "${PASS_KEY:(-2)}" = "))" ]; then
 		execute-action "${PASS_NAME}" $(get-action "${PASS_NAME}")

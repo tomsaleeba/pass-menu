@@ -42,8 +42,7 @@ Email:    never-gonna-give-you-up@rick.com
 Recovery: adhas-w2kjh
           lsk1a-sd809
           2eijk-cc03f
-```
-```js
+
 otpauth://totp/PassMenu:udayvir-singh?secret=LSDHSALKHCYQVIAPLYZ&issuer=PassMenu
 
 action(Autofill) :type Username :tab :type Password :sleep 0.2 :copy OTP
@@ -60,7 +59,7 @@ Password: correct horse battery staple
 ### Actions
 `pass-menu` can automate most stuff using actions, the syntax goes as follows:
 ```js
-action(<name>) <...actions> 
+action(<name>) <...actions>
 ```
 #### Actions can be one of:
 | Action            | Description                          |
@@ -101,14 +100,14 @@ $ pass-menu --clip --timeout 10 -- fzf
 ```
 #### Dmenu
 ```bash
-$ pass-menu -- dmenu -i -l 15 
+$ pass-menu -- dmenu
 
 $ pass-menu --type -- dmenu -i -l 15
 ```
 #### Grep
 ```console
 $ pass-menu --echo -- grep -E '<pass-name>|<key>'
- 
+
 $ pass-menu --echo -- grep -E 'Git/GitHub|Password'
 ```
 
@@ -117,6 +116,6 @@ For more information see `pass-menu --help`
 There are 10+ pass with X menu integerations on Y display server, hence reason for creating `pass-menu`. some popular ones are listed below:
 - [**pass-tessen:**](https://github.com/ayushnix/pass-tessen) inspiration for this plugin, but showed errors with Wayland variables, only works with fzf.
 - [**tessen:**](https://github.com/ayushnix/tessen) closest to this plugin, but does not work with X11.
-- [**rofi-pass:**](https://github.com/carnager/rofi-pass) most feature rich (very bloated), only works with rofi on X11.
+- [**rofi-pass:**](https://github.com/carnager/rofi-pass) most feature rich (bloated), only works with rofi on X11.
 - [**pass-clip:**](https://github.com/ibizaman/pass-clip) worst one of them, does not support key-value pair or TOTP and only works with rofi, fzf
 

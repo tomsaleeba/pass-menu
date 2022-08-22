@@ -25,12 +25,14 @@ help:
 
 install: root-check
 	echo :: INSTALLING PASS-MENU
-	$(call install, 0755, ./pass-menu.sh, $(INSTALL_PATH))
+	$(call install, 0755, ./pass-menu.sh,    $(INSTALL_PATH))
+	$(call install, 0644, ./man/pass-menu.1, /usr/local/share/man/man1/pass-menu.1)
 	echo :: DONE
 
 uninstall: root-check
 	echo :: UNINSTALLING PASS-MENU
 	$(call remove, $(INSTALL_PATH))
+	$(call remove, /usr/local/share/man/man1/pass-menu.1)
 	echo :: DONE
 
 

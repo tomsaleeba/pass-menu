@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
 
-set +x
+set -x
 readonly VERSION="v1.0"
 
 MODE=""
 MENUCMD=""
 TIMEOUT="45"
 STOREDIR="${PASSWORD_STORE_DIR-$HOME/.password-store}"
+autotypeKey='autotype'
 
 if [ ${WAYLAND_DISPLAY} ]; then
-	if type ydotool &>/dev/null; then
-		DOTOOL="ydotool type --file /dev/stdin"
-	else
-		DOTOOL="wtype -"
+  DOTOOL="wtype"
+	if ! type $DOTOOL &>/dev/null; then
+    echo "[ERROR] $DOTOOL command not found"
+    notify-send "[ERROR] failed to find required '$DOTOOL' command"
+    exit 1
 	fi
 	CLIPSET="wl-copy"
 	CLIPGET="wl-paste"
 else
-	DOTOOL="xdotool type --clearmodifiers --file -"
-	CLIPSET="xclip -selection clipboard"
-	CLIPGET="${CLIPSET} -o"
+  echo "[ERROR] x11 not supported"
+  exit 1
 fi
 
 # ---------------------- #
@@ -149,8 +150,14 @@ clip-copy () {
 
 dotool-type () {
 	local VALUE="${1}"
-
-	printf "${VALUE}" | ${DOTOOL}
+  swaymsg 'focus mode_toggle'
+  sleep 0.05
+  # FIXME we want to type the value literally, no interpreting of escape chars,
+  #  etc. `printf` isn't the right tool for the job, but echo in bash seems to do
+  #  the trick. We can also use ${VALUE@Q} or @A if we get stuck, thanks to
+  #  https://stackoverflow.com/a/27817504/1410035 for the tip.
+  echo -n "${VALUE}" | ${DOTOOL} -
+  swaymsg 'focus mode_toggle'
 }
 
 # ---------------------- #
@@ -175,6 +182,10 @@ get-pass-keys () {
 		error '"%s" is too short.' "${PASS_NAME}"
 	fi
 
+  if ! echo ${PASS_FILE} | grep -q "$autotypeKey"; then
+    echo "$autotypeKey"
+  fi
+
 	# Parse Action First
 	awk '
 	/action(.+)/ {
@@ -189,12 +200,15 @@ get-pass-keys () {
 		password="Yes"
 	}
 
-	NR == 1 && ! $2 { print "Password"; password=Null }
+	NR == 1 && ! $2 { print "pass"; password=Null }
 
 	$2 {
 		sub("^ +", "", $1)
-		if ( $1 == "Password") {
-			if (password) print $1
+		if ( $1 == "pass") {
+			if (password) {
+        print $1
+        password=Null
+      }
 		} else {
 			print $1
 		}
@@ -211,7 +225,7 @@ get-pass-value () {
 	OTP)
 		pass otp "${PASS_NAME}"
 	;;
-	Password)
+	pass)
 		pass "${PASS_NAME}" | awk '
 		BEGIN {
 			FS=": +"
@@ -220,14 +234,14 @@ get-pass-value () {
 
 		NR == 1 && ! $2 { print $1; password=Null }
 
-		/Password/ && $2 { if (password) print $2 }'
+		/pass/ && $2 { if (password) print $2 }'
 	;;
 	*)
 		pass "${PASS_NAME}" | awk -v key="${PASS_KEY}" '
 		BEGIN { FS=": +" }
 
 		$2 {
-			if ($1 ~ key)
+			if ($1 == key)
 				for (i=2; i<=NF; i++) print $i
 		}'
 	;;
@@ -259,7 +273,7 @@ execute-action () {
 			shift 2
 			;;
 		:tab)
-			dotool-type "	"
+      dotool-type "$(echo -ne '\t')"
 			shift 1
 			;;
 		:sleep)
@@ -298,8 +312,8 @@ get-mode () {
 	if [ -n "${MODE}" ]; then
 		printf "${MODE}"
 	else
-		local CANDIDATES="clip\ntype\necho"
-		printf "${CANDIDATES}" | ${MENUCMD}
+		local CANDIDATES="type\nclip\necho"
+		printf "${CANDIDATES}" | PM_PREPOP=off ${MENUCMD}
 	fi
 }
 
@@ -317,16 +331,21 @@ main () {
 	PASS_NAME=$(get-pass-files | call-menu)
 	[ -z "${PASS_NAME}" ] && exit 1
 
-	PASS_KEY=$(get-pass-keys "${PASS_NAME}" | call-menu)
+	PASS_KEY=$(get-pass-keys "${PASS_NAME}" | PM_PREPOP=off call-menu)
 	[ -z "${PASS_KEY}" ] && exit 1
 
+  # FIXME need to make "autotype" an inferred action
 	if [ "${PASS_KEY:(-2)}" = "))" ]; then
 		execute-action "${PASS_NAME}" $(get-action "${PASS_NAME}")
+		return 0
+  elif [ "${PASS_KEY}" = "$autotypeKey" ]; then
+		execute-action "${PASS_NAME}" :type user :tab :type pass
 		return 0
 	fi
 
 	OUT=$(get-pass-value "${PASS_NAME}" "${PASS_KEY}")
 
+  # FIXME make default "type" and others are key-bindings
 	case "$(get-mode)" in
 		clip) clip-copy "${OUT}" ;;
 		type) dotool-type "${OUT}" ;;

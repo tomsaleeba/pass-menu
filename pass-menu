@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
-set -x
+set -ux
 readonly VERSION="v1.0"
 
-MODE=""
 MENUCMD=""
 TIMEOUT="45"
 STOREDIR="${PASSWORD_STORE_DIR-$HOME/.password-store}"
@@ -32,16 +31,13 @@ show-help () {
 
 Options:
   -p, --path              path to password store
-  -c, --clip              copy output to clipboard
       --timeout           timeout for clearing clipboard [default: 45]
-  -t, --type              type the output, useful for GUI applications
-  -e, --echo              print output to standard output
   -h, --help              display this help and exit
   -v, --version           output version information and exit
 
 Examples:
-	pass-menu --clip --timeout 15 -- fzf
-	pass-menu --type              -- dmenu -i -l 15"
+	pass-menu --timeout 15 -- fzf
+	pass-menu              -- dmenu -i -l 15"
 
 	exit 0
 }
@@ -72,16 +68,6 @@ set-opt-path () {
 	STOREDIR="${OPTION}"
 }
 
-set-opt-mode () {
-	local OPTION="${1}"
-
-	if [ -n "${MODE}" ] && [ "${MODE}" != "${OPTION}" ]; then
-		error 'conflicting option "--%s" with "--%s"' "${OPTION}" "${MODE}"
-	fi
-
-	MODE="${OPTION}"
-}
-
 set-opt-timeout () {
 	local OPTION="${1}"
 
@@ -109,9 +95,6 @@ opt-error () {
 while [ -v 1 ]; do
 	case "${1}" in
 		-p | --path)     set-opt-path "${2}"; shift 2 ;;
-		-c | --clip)     set-opt-mode 'clip'; shift 1 ;;
-		-t | --type)     set-opt-mode 'type'; shift 1 ;;
-		-e | --echo)     set-opt-mode 'echo'; shift 1 ;;
 		     --timeout)  set-opt-timeout "${2}" ; shift 2 ;;
 		-h | --help)     show-help ;;
 		-v | --version)  show-version ;;
@@ -182,7 +165,7 @@ get-pass-keys () {
 		error '"%s" is too short.' "${PASS_NAME}"
 	fi
 
-  if ! echo ${PASS_FILE} | grep -q "$autotypeKey"; then
+  if ! echo ${PASS_FILE} | grep -q "^$autotypeKey"; then
     echo "$autotypeKey"
   fi
 
@@ -215,6 +198,7 @@ get-pass-keys () {
 	}
 
 	/^ *otpauth:/ { print "OTP" }' <<< "${PASS_FILE}"
+  # FIXME make a consistent default "autotype" or "pass"
 }
 
 get-pass-value () {
@@ -276,6 +260,10 @@ execute-action () {
       dotool-type "$(echo -ne '\t')"
 			shift 1
 			;;
+		:space)
+      dotool-type " "
+			shift 1
+			;;
 		:sleep)
 			sleep "${2}"
 			shift 2
@@ -308,15 +296,6 @@ execute-action () {
 	done
 }
 
-get-mode () {
-	if [ -n "${MODE}" ]; then
-		printf "${MODE}"
-	else
-		local CANDIDATES="type\nclip\necho"
-		printf "${CANDIDATES}" | PM_PREPOP=off ${MENUCMD}
-	fi
-}
-
 call-menu () {
 	local PIPE="$(< /dev/stdin)"
 
@@ -333,23 +312,28 @@ main () {
 
 	PASS_KEY=$(get-pass-keys "${PASS_NAME}" | PM_PREPOP=off call-menu)
 	[ -z "${PASS_KEY}" ] && exit 1
+  local theMode=$(echo $PASS_KEY | cut -f1 -d';')
+  local theKey=$(echo $PASS_KEY | cut -f2 -d';')
 
-  # FIXME need to make "autotype" an inferred action
-	if [ "${PASS_KEY:(-2)}" = "))" ]; then
+	if [ "${theKey:(-2)}" = "))" ]; then
 		execute-action "${PASS_NAME}" $(get-action "${PASS_NAME}")
 		return 0
-  elif [ "${PASS_KEY}" = "$autotypeKey" ]; then
+  elif [ "${theKey}" = "$autotypeKey" ]; then
+    autotypeFromFile=$(get-pass-value "${PASS_NAME}" "$autotypeKey")
+    if [ -n "$autotypeFromFile" ]; then
+      execute-action "${PASS_NAME}" $autotypeFromFile
+      return 0
+    fi
 		execute-action "${PASS_NAME}" :type user :tab :type pass
 		return 0
 	fi
 
-	OUT=$(get-pass-value "${PASS_NAME}" "${PASS_KEY}")
+	OUT=$(get-pass-value "${PASS_NAME}" "${theKey}")
 
-  # FIXME make default "type" and others are key-bindings
-	case "$(get-mode)" in
+	case "$theMode" in
 		clip) clip-copy "${OUT}" ;;
-		type) dotool-type "${OUT}" ;;
 		echo) printf "${OUT}" ;;
+		*) dotool-type "${OUT}" ;;
 	esac
 }
 

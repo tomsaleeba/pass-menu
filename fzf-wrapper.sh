@@ -6,7 +6,11 @@ lastSelectionFile=$HOME/.cache/pass-menu.last
 touch $lastSelectionFile
 
 if [ "${PM_PREPOP:-}" = "off" ]; then
-  fzf
+  fzf \
+    --bind "ctrl-e:execute(echo 'echo;{}')+abort" \
+    --bind "ctrl-y:execute(echo 'clip;{}')+abort" \
+    --header-first \
+    --header 'C-e: echo, C-y: yank/copy, Enter: type'
 else
   fzf \
     -q "$(cat $lastSelectionFile)" \

@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
 
-set -ux
+set -eux
 readonly VERSION="v1.0"
 
 MENUCMD=""
 TIMEOUT="45"
 STOREDIR="${PASSWORD_STORE_DIR-$HOME/.password-store}"
 autotypeKey='autotype'
+isExplicitExit=no
+
+# thanks https://medium.com/@dirk.avery/the-bash-trap-trap-ce6083f36700
+trap 'catch $? $LINENO' EXIT
+
+catch() {
+  if [ "$isExplicitExit" = "no" ] && [ "$1" != "0" ]; then
+    # exiting due to error
+    errMsg="[ERROR] pass-menu: return code $1 occurred on line $2"
+    echo "$errMsg"
+    notify-send "$errMsg"
+  fi
+}
 
 if [ ${WAYLAND_DISPLAY} ]; then
   DOTOOL="wtype"
@@ -135,7 +148,7 @@ dotool-type () {
 	local VALUE="${1}"
   swaymsg 'focus mode_toggle'
   sleep 0.05
-  # FIXME we want to type the value literally, no interpreting of escape chars,
+  # we want to type the value literally, no interpreting of escape chars,
   #  etc. `printf` isn't the right tool for the job, but echo in bash seems to do
   #  the trick. We can also use ${VALUE@Q} or @A if we get stuck, thanks to
   #  https://stackoverflow.com/a/27817504/1410035 for the tip.
@@ -153,8 +166,9 @@ get-pass-files () {
 	LIST=("$STOREDIR"/**/*.gpg)
 	LIST=("${LIST[@]#"$STOREDIR"/}")
 	LIST=("${LIST[@]%.gpg}")
-
+  set +x
 	printf "%s\n" "${LIST[@]}"
+  set -x
 }
 
 get-pass-keys () {
@@ -243,11 +257,11 @@ get-action () {
 }
 
 execute-action () {
-	local PASS_NAME="${1}"
+	local PASS_NAME="${1-}"
 	shift
 
-	while [ -n "${1}" ]; do
-		case "${1}" in
+	while [ -n "${1:-}" ]; do
+		case "${1:-}" in
 		:clip)
 			clip-copy "$(get-pass-value "${PASS_NAME}" "${2}")"
 			shift 2
@@ -269,16 +283,16 @@ execute-action () {
 			shift 2
 			;;
 		:exec | :notify)
-			local ACT="${1}"
+			local ACT="${1:-}"
 			local STR="${2:1}"
 			shift 2
 			# Parse String
 			while [ ! "${STR:(-1)}" = '"' ]; do
-				if [ -z "${1}" ]; then
+				if [ -z "${1:-}" ]; then
 					error 'unmatched {"} in %s.' "${PASS_NAME}"
 				fi
 
-				STR="${STR} ${1}"
+				STR="${STR} ${1:-}"
 				shift 1
 			done
 
@@ -290,33 +304,41 @@ execute-action () {
 				notify-send "${STR}"
 			fi
 			;;
-		:*) error "invalid action %s in %s" "${1}" "${PASS_NAME}" ;;
-		*)  error "invalid param %s in %s" "${1}" "${PASS_NAME}" ;;
+		:*) error "invalid action %s in %s" "${1:-}" "${PASS_NAME}" ;;
+		*)  error "invalid param %s in %s" "${1:-}" "${PASS_NAME}" ;;
 		esac
 	done
 }
 
 call-menu () {
-	local PIPE="$(< /dev/stdin)"
-
-	[ -z "${PIPE}" ] && exit 1
-
-	printf "${PIPE}" | ${MENUCMD}
+  set +x  # too chatty in logs to dump all the pass files
+  local PIPE="$(< /dev/stdin)"
+  if [ -z "${PIPE}" ]; then
+    exit 1
+  fi
+  printf "${PIPE}" | ${MENUCMD}
+  set -x
 }
 
 main () {
 	local PASS_NAME PASS_KEY OUT
 
 	PASS_NAME=$(get-pass-files | call-menu)
-	[ -z "${PASS_NAME}" ] && exit 1
+  if [ -z "${PASS_NAME:-}" ]; then
+    isExplicitExit=yes
+    return 1
+  fi
 
 	PASS_KEY=$(get-pass-keys "${PASS_NAME}" | PM_PREPOP=off call-menu)
-	[ -z "${PASS_KEY}" ] && exit 1
+  if [ -z "${PASS_KEY}" ]; then
+    isExplicitExit=yes
+    exit 1
+  fi
   local theMode=$(echo $PASS_KEY | cut -f1 -d';')
   local theKey=$(echo $PASS_KEY | cut -f2 -d';')
 
 	if [ "${theKey:(-2)}" = "))" ]; then
-		execute-action "${PASS_NAME}" $(get-action "${PASS_NAME}")
+		execute-action "${PASS_NAME}" $(get-action "${PASS_NAME}" "${theKey}")
 		return 0
   elif [ "${theKey}" = "$autotypeKey" ]; then
     autotypeFromFile=$(get-pass-value "${PASS_NAME}" "$autotypeKey")

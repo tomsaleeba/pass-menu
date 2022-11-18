@@ -18,6 +18,7 @@ catch() {
     errMsg="[ERROR] pass-menu: return code $1 occurred on line $2"
     echo "$errMsg"
     notify-send "$errMsg"
+    sleep 10 # for a chance to see the error
   fi
 }
 
@@ -61,11 +62,14 @@ show-version () {
 }
 
 error () {
-	local  MSG="${1}"; shift 1
-	local ARGS="${@}"
+  local  MSG="${1}"; shift 1
+  local ARGS="${@}"
 
-	printf "pass-menu: ${MSG}\n" ${ARGS} >&2
-	exit 1
+  local m=$(printf "pass-menu: ${MSG}\n" ${ARGS})
+  echo $m >&2
+  notify-send "ERROR: $m"
+  isExplicitExit=yes
+  exit 1
 }
 
 # ---------------------- #

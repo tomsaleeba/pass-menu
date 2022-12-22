@@ -189,7 +189,7 @@ get-pass-keys () {
 
 	# Parse Action First
 	awk '
-	/action(.+)/ {
+	/^\s*action(.+)/ {
 		match($1, /action\((.+)\)/, a)
 		printf "((%s))\n", a[1]
 	}' <<< "${PASS_FILE}"

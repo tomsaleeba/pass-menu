@@ -22,8 +22,9 @@ catch() {
   fi
 }
 
-if [ ${WAYLAND_DISPLAY} ]; then
-  DOTOOL="wtype"
+if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+  FOCUS_TOGGLE_CMD="swaymsg 'focus mode_toggle'"
+  DOTOOL="wtype -"
 	if ! type $DOTOOL &>/dev/null; then
     echo "[ERROR] $DOTOOL command not found"
     notify-send "[ERROR] failed to find required '$DOTOOL' command"
@@ -31,8 +32,13 @@ if [ ${WAYLAND_DISPLAY} ]; then
 	fi
 	CLIPSET="wl-copy"
 	CLIPGET="wl-paste"
+elif [ -n "${DISPLAY:-}" ]; then
+  FOCUS_TOGGLE_CMD="i3-msg 'focus mode_toggle'"
+  DOTOOL="xdotool type --clearmodifiers --file -"
+  CLIPSET="xclip -selection clipboard"
+  CLIPGET="xclip -selection clipboard -o"
 else
-  echo "[ERROR] x11 not supported"
+  echo "[ERROR] can't determine system type"
   exit 1
 fi
 
@@ -150,14 +156,14 @@ clip-copy () {
 
 dotool-type () {
 	local VALUE="${1}"
-  swaymsg 'focus mode_toggle'
+  bash -c "${FOCUS_TOGGLE_CMD}"
   sleep 0.05
   # we want to type the value literally, no interpreting of escape chars,
   #  etc. `printf` isn't the right tool for the job, but echo in bash seems to do
   #  the trick. We can also use ${VALUE@Q} or @A if we get stuck, thanks to
   #  https://stackoverflow.com/a/27817504/1410035 for the tip.
-  echo -n "${VALUE}" | ${DOTOOL} -
-  swaymsg 'focus mode_toggle'
+  echo -n "${VALUE}" | ${DOTOOL}
+  bash -c "${FOCUS_TOGGLE_CMD}"
 }
 
 # ---------------------- #

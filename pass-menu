@@ -183,22 +183,23 @@ get-pass-files () {
 
 get-pass-keys () {
 	local PASS_NAME="${1}"
-	local PASS_FILE="$(pass "${PASS_NAME}")"
+	local PASS_FILE_CONTENTS="$(pass "${PASS_NAME}")"
 	
-	if [ ${#PASS_FILE} -le 1 ]; then
+	if [ ${#PASS_FILE_CONTENTS} -le 1 ]; then
 		error '"%s" is too short.' "${PASS_NAME}"
 	fi
 
-  if ! echo ${PASS_FILE} | grep -q "^$autotypeKey"; then
+  # "autotype" is always the first option
+  if ! echo ${PASS_FILE_CONTENTS} | grep -q "^$autotypeKey"; then
     echo "$autotypeKey"
   fi
 
-	# Parse Action First
+  # output all actions before other keys
 	awk '
 	/^\s*action(.+)/ {
-		match($1, /action\((.+)\)/, a)
-		printf "((%s))\n", a[1]
-	}' <<< "${PASS_FILE}"
+		match($1, /action\((.+)\)/, theMatch)
+    printf "(%s)\n", theMatch[1]
+	}' <<< "${PASS_FILE_CONTENTS}"
 
 	# Parse Rest of Keys
 	awk '
@@ -207,7 +208,14 @@ get-pass-keys () {
 		password="Yes"
 	}
 
-	NR == 1 && ! $2 { print "pass"; password=Null }
+  /^\s*action(.+)/ {
+    next
+  }
+
+  NR == 1 && ! $2 {
+    print "pass"
+    password=Null
+  }
 
 	$2 {
 		sub("^ +", "", $1)
@@ -221,8 +229,10 @@ get-pass-keys () {
 		}
 	}
 
-	/^ *otpauth:/ { print "OTP" }' <<< "${PASS_FILE}"
-  # FIXME make a consistent default "autotype" or "pass"
+	/^ *otpauth:/ {
+    print "OTP"
+  }
+  ' <<< "${PASS_FILE_CONTENTS}"
 }
 
 get-pass-value () {
@@ -260,10 +270,15 @@ get-action () {
 	local PASS_NAME="${1}"
 	local  ACT_NAME="${2}"
 
-	pass "${PASS_NAME}" | awk -v action="action.+${ACT_NAME}" '{
-		if ($1 ~ action)
-			for (i=2; i<=NF; i++) print $i
-	}'
+	pass "${PASS_NAME}" | awk -v actionKey="action${ACT_NAME}:" '{
+    if ($1 != actionKey) {
+      next
+    }
+    for (i=2; i<=NF; i++) {
+      # print each fragment of the action on its own line
+      print $i
+    }
+  }'
 }
 
 execute-action () {
@@ -347,7 +362,8 @@ main () {
   local theMode=$(echo $PASS_KEY | cut -f1 -d';')
   local theKey=$(echo $PASS_KEY | cut -f2 -d';')
 
-	if [ "${theKey:(-2)}" = "))" ]; then
+	if [ "${theKey:0:1}" = "(" ] && [ "${theKey:(-1)}" = ")" ]; then
+    # it's an action
 		execute-action "${PASS_NAME}" $(get-action "${PASS_NAME}" "${theKey}")
 		return 0
   elif [ "${theKey}" = "$autotypeKey" ]; then

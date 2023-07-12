@@ -156,13 +156,18 @@ clip-copy () {
 
 dotool-type () {
 	local VALUE="${1}"
+  local delay="${2:-}"
+  local delayFrag=''
+  if [ -n "$delay" ]; then
+    delayFrag="--delay $delay"
+  fi
   bash -c "${FOCUS_TOGGLE_CMD}"
   sleep 0.05
   # we want to type the value literally, no interpreting of escape chars,
   #  etc. `printf` isn't the right tool for the job, but echo in bash seems to do
   #  the trick. We can also use ${VALUE@Q} or @A if we get stuck, thanks to
   #  https://stackoverflow.com/a/27817504/1410035 for the tip.
-  echo -n "${VALUE}" | ${DOTOOL}
+  echo -n "${VALUE}" | ${DOTOOL} ${delayFrag}
   bash -c "${FOCUS_TOGGLE_CMD}"
 }
 
@@ -293,6 +298,10 @@ execute-action () {
 			;;
 		:type)
 			dotool-type "$(get-pass-value "${PASS_NAME}" "${2}")"
+			shift 2
+			;;
+		:slowtype)
+			dotool-type "$(get-pass-value "${PASS_NAME}" "${2}")" 100
 			shift 2
 			;;
 		:tab)

@@ -24,10 +24,22 @@ catch() {
 }
 
 if [ -n "${WAYLAND_DISPLAY:-}" ]; then
-  FOCUS_TOGGLE_CMD="swaymsg 'focus mode_toggle'"
+  # Pick the compositor-specific command to move focus between the fzf/menu
+  # window (which grabs focus while selecting) and the target window we type
+  # into. Both niri and sway toggle focus between the floating and tiling
+  # layouts; the menu is expected to be floating and the target tiled.
+  if [ -n "${NIRI_SOCKET:-}" ] || type niri &>/dev/null; then
+    FOCUS_TOGGLE_CMD="niri msg action switch-focus-between-floating-and-tiling"
+  elif [ -n "${SWAYSOCK:-}" ] || type swaymsg &>/dev/null; then
+    FOCUS_TOGGLE_CMD="swaymsg 'focus mode_toggle'"
+  else
+    echo "[ERROR] unsupported wayland compositor (need niri or sway)"
+    notify-send "[ERROR] pass-menu: unsupported wayland compositor"
+    exit 1
+  fi
   DOTOOL="wtype -"
-	if ! type $DOTOOL &>/dev/null; then
-    echo "[ERROR] $DOTOOL command not found"
+	if ! type ${DOTOOL%% *} &>/dev/null; then
+    echo "[ERROR] '$DOTOOL' command not found"
     notify-send "[ERROR] failed to find required '$DOTOOL' command"
     exit 1
 	fi
